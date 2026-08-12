@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bmstool"
+version = "0.1.0"
+description = "CLI to list the days and showtimes available for a BookMyShow movie link"
+requires-python = ">=3.10"
+dependencies = ["requests>=2.31"]
+
+[project.scripts]
+bms = "bmstool.cli:main"
+bms-notify = "bmstool.notify:main"
+
+[tool.setuptools]
+packages = ["bmstool"]

@@ -1,0 +1,66 @@
+"""HTTP fetching of BookMyShow showtime pages."""
+
+import time
+
+import requests
+
+from . import BmsFetchError
+from .url import BmsTarget, build_url
+
+USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+)
+
+DEFAULT_HEADERS = {
+    "User-Agent": USER_AGENT,
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://in.bookmyshow.com/",
+    "Upgrade-Insecure-Requests": "1",
+}
+
+
+class Fetcher:
+    """Reusable session for fetching showtime pages, with retry and polite delay."""
+
+    def __init__(self, timeout: float = 20.0, retries: int = 2, delay: float = 0.5):
+        self.session = requests.Session()
+        self.session.headers.update(DEFAULT_HEADERS)
+        self.timeout = timeout
+        self.retries = max(1, retries)
+        self.delay = delay
+        self._fetched_any = False
+
+    def fetch_page(self, target: BmsTarget, date_code: str | None = None) -> str:
+        url = build_url(target, date_code)
+        if self._fetched_any and self.delay:
+            time.sleep(self.delay)
+        self._fetched_any = True
+
+        last_error: Exception | None = None
+        for attempt in range(self.retries):
+            try:
+                resp = self.session.get(url, timeout=self.timeout)
+            except requests.RequestException as exc:
+                last_error = exc
+            else:
+                if resp.status_code == 200:
+                    return resp.text
+                last_error = BmsFetchError(
+                    f"HTTP {resp.status_code} for {url}"
+                )
+                if resp.status_code in (400, 404):
+                    break
+            if attempt + 1 < self.retries:
+                time.sleep(1.0)
+        raise BmsFetchError(f"Could not fetch {url}: {last_error}")
+
+    def close(self) -> None:
+        self.session.close()
+
+    def __enter__(self) -> "Fetcher":
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self.close()
